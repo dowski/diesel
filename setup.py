@@ -2,7 +2,7 @@ import sys, os
 assert sys.version_info >= (2, 6), \
 "Diesel requires python 2.6 (or greater 2.X release)"
 
-from setuptools import setup
+from setuptools import setup, Extension
 
 if os.system("which palmc > /dev/null 2>&1") == 0:
     os.system("palmc ./diesel/protocols ./diesel/protocols")
@@ -53,4 +53,5 @@ Other bundled protocols include MongoDB, Riak, and Redis client libraries.
         "http-parser >= 0.7.12",
         "dnspython",
     ] + additional_requires),
+    ext_modules=[Extension("diesel.cbuf", ["diesel/cbuf.c"])],
     )
