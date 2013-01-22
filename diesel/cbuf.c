@@ -64,7 +64,7 @@ Buffer_feed(PyObject *self, PyObject *args, PyObject *kw)
     if (size + buf->internal_buffer->current_size >= buf->internal_buffer->max_size) {
         grow_internal_buffer(buf->internal_buffer, size);
     }
-    strcpy(buf->internal_buffer->current_pos, s);
+    memcpy(buf->internal_buffer->current_pos, s, size);
     buf->internal_buffer->current_size += size;
     buf->internal_buffer->current_pos += size;
     return Py_None;
@@ -105,7 +105,20 @@ Buffer_dealloc(Buffer *self)
 static PyObject *
 Buffer_repr(PyObject *self)
 {
-    return PyString_FromFormat("Buffer(\"%s\")", ((Buffer *)self)->internal_buffer->buf);
+    PyObject *payload, *res, *fmt;
+    PyTupleObject *fmtargs;
+    diesel_buffer *buf;
+    buf = ((Buffer *)self)->internal_buffer;
+    payload = PyString_FromStringAndSize(buf->buf, buf->current_size);
+    assert(payload);
+    fmtargs = PyTuple_Pack(1, payload);
+    fmt = PyString_FromString("Buffer(%r)");
+    printf("made fmtargs\n");
+    res = PyString_Format(fmt, fmtargs);
+    Py_DECREF(fmtargs);
+    Py_DECREF(fmt);
+    Py_DECREF(payload);
+    return res;
 }
 
 //static PyObject *
