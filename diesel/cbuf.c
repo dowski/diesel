@@ -23,13 +23,15 @@ typedef struct {
     diesel_buffer *internal_buffer;
 } Buffer;
 
+void grow_internal_buffer(struct diesel_buffer *internal_buffer, const int size);
+
 struct diesel_buffer *
-diesel_buffer_alloc(int bufsize)
+diesel_buffer_alloc(int startsize)
 {
     diesel_buffer *buf;
     if (!(buf = (diesel_buffer *)malloc(sizeof(diesel_buffer))))
         return NULL;
-    if (!(buf->buf = (char *)malloc(sizeof(char) * bufsize))) {
+    if (!(buf->buf = (char *)malloc(sizeof(char) * startsize))) {
         free(buf);
         return NULL;
     }
@@ -37,9 +39,17 @@ diesel_buffer_alloc(int bufsize)
     buf->mtype = UNSET;
     buf->sentinel.unset = 1;
     buf->current_size = 0;
-    buf->current_pos = &(buf->buf[0]);
-    buf->max_size = bufsize;
+    buf->current_pos = buf->buf;
+    buf->max_size = startsize;
     return buf;
+}
+
+void
+grow_internal_buffer(struct diesel_buffer *internal_buffer, const int size)
+{
+    internal_buffer->max_size += size;
+    internal_buffer->buf = (char *)realloc(internal_buffer->buf, internal_buffer->max_size);
+    internal_buffer->current_pos = (internal_buffer->buf + internal_buffer->current_size);
 }
 
 static PyObject *
@@ -51,10 +61,11 @@ Buffer_feed(PyObject *self, PyObject *args, PyObject *kw)
 
     PyArg_ParseTuple(args, "s#", &s, &size);
 
-    if (size + buf->internal_buffer->current_size > buf->internal_buffer->max_size) {
-        assert(0);
+    if (size + buf->internal_buffer->current_size >= buf->internal_buffer->max_size) {
+        grow_internal_buffer(buf->internal_buffer, size);
     }
     strcpy(buf->internal_buffer->current_pos, s);
+    buf->internal_buffer->current_size += size;
     buf->internal_buffer->current_pos += size;
     return Py_None;
 }
@@ -93,11 +104,11 @@ Buffer_repr(PyObject *self)
 static int
 Buffer_init(PyObject *self, PyObject *args, PyObject *kw)
 {
-    int bufsize;
-    PyArg_ParseTuple(args, "i", &bufsize);
+    int startsize;
+    PyArg_ParseTuple(args, "i", &startsize);
 
     diesel_buffer *buf;
-    if (!(buf = diesel_buffer_alloc(bufsize)))
+    if (!(buf = diesel_buffer_alloc(startsize)))
         return -1;
     ((Buffer *)self)->internal_buffer = buf;
     return 0;
