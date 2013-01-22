@@ -7,8 +7,8 @@ typedef int Missing;
 typedef struct diesel_buffer {
     enum match_types mtype;
     union {
-        int intpat;
-        char *bytepat;
+        long intpat;
+        char bytepat[32];
         BufAny any;
         Missing unset;
     } sentinel;
@@ -70,6 +70,23 @@ Buffer_feed(PyObject *self, PyObject *args, PyObject *kw)
     return Py_None;
 }
 
+static PyObject *
+Buffer_set_term(PyObject *self, PyObject *args, PyObject *kw)
+{
+    PyObject *term;
+    PyArg_ParseTuple(args, "O", &term);
+    Buffer *buf = (Buffer *)self;
+
+    if (PyString_Check(term)) {
+        buf->internal_buffer->mtype = BYTE_PATTERN;
+        strcpy(buf->internal_buffer->sentinel.bytepat, PyString_AsString(term));
+    } else if (PyInt_Check(term)) {
+        buf->internal_buffer->mtype = INT;
+        buf->internal_buffer->sentinel.intpat = PyInt_AsLong(term);
+    }
+    return Py_None;
+}
+
 static void
 diesel_buffer_free(diesel_buffer *buf)
 {
@@ -117,6 +134,9 @@ Buffer_init(PyObject *self, PyObject *args, PyObject *kw)
 static PyMethodDef Buffer_methods[] = {
     {"feed", (PyCFunction)Buffer_feed, METH_VARARGS,
         "Feed new data into the buffer"
+    },
+    {"set_term", (PyCFunction)Buffer_set_term, METH_VARARGS,
+        "Set a new terminal for the buffer"
     },
     {NULL}
 };
