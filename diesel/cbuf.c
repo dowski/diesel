@@ -87,6 +87,34 @@ Buffer_set_term(PyObject *self, PyObject *args, PyObject *kw)
     return Py_None;
 }
 
+static PyObject *
+Buffer_check(PyObject *self, PyObject *args, PyObject *kw)
+{
+    diesel_buffer *buf = ((Buffer *)self)->internal_buffer;
+    char *match;
+
+    /* XXX beware, broken code to follow!
+     *
+     * It fails in the following ways:
+     *  1) Only matches a byte terminal; will blow up on anything else.
+     *  2) Uses strlen to find the length of the terminal (embedded NUL will 
+     *     kill it).
+     *  3) Doesn't trim the internal *buf and repoint it or *current_pos.
+     *
+     * BUT ... it does match a byte terminal (and was hacked together over a
+     * lunch break).
+     */
+    match = (char *)memmem(buf->buf, buf->current_size, buf->sentinel.bytepat, strlen(buf->sentinel.bytepat));
+    if (match) {
+        int sz = (match - buf->buf) + strlen(buf->sentinel.bytepat);
+        PyObject *res;
+        res = PyString_FromStringAndSize(buf->buf, sz);
+        return res;
+    } else {
+        return Py_None;
+    }
+}
+
 static void
 diesel_buffer_free(diesel_buffer *buf)
 {
@@ -150,6 +178,9 @@ static PyMethodDef Buffer_methods[] = {
     },
     {"set_term", (PyCFunction)Buffer_set_term, METH_VARARGS,
         "Set a new terminal for the buffer"
+    },
+    {"check", (PyCFunction)Buffer_check, METH_NOARGS,
+        "Check to see if the current terminal is present in the buffer"
     },
     {NULL}
 };
