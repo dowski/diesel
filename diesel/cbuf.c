@@ -8,7 +8,7 @@ typedef struct diesel_buffer {
     enum match_types mtype;
     union {
         long term_int;
-        char term_bytes[32];
+        char term_bytes[33];
         BufAny term_any;
         Unset term_unset;
     } sentinel;
@@ -99,8 +99,12 @@ Buffer_set_term(PyObject *self, PyObject *args, PyObject *kw)
     Buffer *buf = (Buffer *)self;
 
     if (PyString_Check(term)) {
+        Py_ssize_t sz;
+        char *term_val = NULL;
         buf->internal_buffer->mtype = BYTES;
-        strcpy(buf->internal_buffer->sentinel.term_bytes, PyString_AsString(term));
+        PyString_AsStringAndSize(term, &term_val, &sz);
+        buf->internal_buffer->sentinel.term_bytes[0] = (char)sz;
+        memcpy(buf->internal_buffer->sentinel.term_bytes+1, term_val, sz);
     } else if (PyInt_Check(term)) {
         buf->internal_buffer->mtype = INT;
         buf->internal_buffer->sentinel.term_int = PyInt_AsLong(term);
@@ -112,22 +116,24 @@ static PyObject *
 Buffer_check(PyObject *self, PyObject *args, PyObject *kw)
 {
     diesel_buffer *buf = ((Buffer *)self)->internal_buffer;
-    int sz = 0;
+    int sz = 0, term_sz;
     char *match = NULL;
     PyObject *res = NULL;
 
     /* XXX beware, broken code to follow!
      *
      * It fails in the following ways:
-     *  1) Uses strlen to find the length of the BYTES sentinel (embedded NUL will 
-     *     kill it).
+     *  1) It does not reset the sentinel to UNSET.
+     *  2) It does not handle ANY sentinels.
+     *  3) It does not handle UNSET sentinels.
      *
      */
     switch (buf->mtype) {
         case BYTES :
-            match = (char *)memmem(buf->buf, buf->current_size, buf->sentinel.term_bytes, strlen(buf->sentinel.term_bytes));
+            term_sz = (int)buf->sentinel.term_bytes[0];
+            match = (char *)memmem(buf->buf, buf->current_size, buf->sentinel.term_bytes+1, term_sz);
             if (match) {
-                sz = (match - buf->buf) + strlen(buf->sentinel.term_bytes);
+                sz = (match - buf->buf) + term_sz;
                 res = PyString_FromStringAndSize(buf->buf, sz);
             } 
             break;
@@ -164,7 +170,6 @@ Buffer_repr(PyObject *self)
     assert(payload);
     fmtargs = PyTuple_Pack(1, payload);
     fmt = PyString_FromString("Buffer(%r)");
-    printf("made fmtargs\n");
     res = PyString_Format(fmt, fmtargs);
     Py_DECREF(fmtargs);
     Py_DECREF(fmt);
