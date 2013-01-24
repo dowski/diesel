@@ -123,9 +123,7 @@ Buffer_check(PyObject *self, PyObject *args, PyObject *kw)
     /* XXX beware, broken code to follow!
      *
      * It fails in the following ways:
-     *  1) It does not reset the sentinel to UNSET.
-     *  2) It does not handle ANY sentinels.
-     *  3) It does not handle UNSET sentinels.
+     *  1) It does not handle the ANY sentinel.
      *
      */
     switch (buf->mtype) {
@@ -143,9 +141,13 @@ Buffer_check(PyObject *self, PyObject *args, PyObject *kw)
                 res = PyString_FromStringAndSize(buf->buf, sz);
             }
             break;
+        case UNSET :
+            return Py_None;
     }
     if (res) {
         shrink_internal_buffer(buf, sz);
+        buf->mtype = UNSET;
+        buf->sentinel.term_unset = 1;
         return res;
     } else {
         return Py_None;
