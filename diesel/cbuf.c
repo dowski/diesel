@@ -133,8 +133,7 @@ Buffer_dealloc(Buffer *self)
 static PyObject *
 Buffer_repr(PyObject *self)
 {
-    PyObject *payload, *res, *fmt;
-    PyTupleObject *fmtargs;
+    PyObject *payload, *res, *fmt, *fmtargs;
     diesel_buffer *buf;
     buf = ((Buffer *)self)->internal_buffer;
     payload = PyString_FromStringAndSize(buf->buf, buf->current_size);
