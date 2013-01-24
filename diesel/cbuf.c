@@ -1,16 +1,16 @@
 #include <Python.h>
 
-enum match_types {UNSET, BYTE_PATTERN, INT, BUF_ANY};
+enum match_types {UNSET, BYTES, INT, ANY};
 typedef int BufAny;
-typedef int Missing;
+typedef int Unset;
 
 typedef struct diesel_buffer {
     enum match_types mtype;
     union {
-        long intpat;
-        char bytepat[32];
-        BufAny any;
-        Missing unset;
+        long term_int;
+        char term_bytes[32];
+        BufAny term_any;
+        Unset term_unset;
     } sentinel;
     char *buf;
     int current_size;
@@ -37,7 +37,7 @@ diesel_buffer_alloc(int startsize)
     }
     buf->buf[0] = '\0';
     buf->mtype = UNSET;
-    buf->sentinel.unset = 1;
+    buf->sentinel.term_unset = 1;
     buf->current_size = 0;
     buf->current_pos = buf->buf;
     buf->max_size = startsize;
@@ -78,11 +78,11 @@ Buffer_set_term(PyObject *self, PyObject *args, PyObject *kw)
     Buffer *buf = (Buffer *)self;
 
     if (PyString_Check(term)) {
-        buf->internal_buffer->mtype = BYTE_PATTERN;
-        strcpy(buf->internal_buffer->sentinel.bytepat, PyString_AsString(term));
+        buf->internal_buffer->mtype = BYTES;
+        strcpy(buf->internal_buffer->sentinel.term_bytes, PyString_AsString(term));
     } else if (PyInt_Check(term)) {
         buf->internal_buffer->mtype = INT;
-        buf->internal_buffer->sentinel.intpat = PyInt_AsLong(term);
+        buf->internal_buffer->sentinel.term_int = PyInt_AsLong(term);
     }
     return Py_None;
 }
@@ -104,9 +104,9 @@ Buffer_check(PyObject *self, PyObject *args, PyObject *kw)
      * BUT ... it does match a byte terminal (and was hacked together over a
      * lunch break).
      */
-    match = (char *)memmem(buf->buf, buf->current_size, buf->sentinel.bytepat, strlen(buf->sentinel.bytepat));
+    match = (char *)memmem(buf->buf, buf->current_size, buf->sentinel.term_bytes, strlen(buf->sentinel.term_bytes));
     if (match) {
-        int sz = (match - buf->buf) + strlen(buf->sentinel.bytepat);
+        int sz = (match - buf->buf) + strlen(buf->sentinel.term_bytes);
         PyObject *res;
         res = PyString_FromStringAndSize(buf->buf, sz);
         return res;
