@@ -23,7 +23,8 @@ typedef struct {
     diesel_buffer *internal_buffer;
 } Buffer;
 
-void grow_internal_buffer(struct diesel_buffer *internal_buffer, const int size);
+void grow_internal_buffer(diesel_buffer *internal_buffer, const int size);
+void shrink_internal_buffer(diesel_buffer *internal_buffer, const int size);
 
 struct diesel_buffer *
 diesel_buffer_alloc(int startsize)
@@ -45,11 +46,31 @@ diesel_buffer_alloc(int startsize)
 }
 
 void
-grow_internal_buffer(struct diesel_buffer *internal_buffer, const int size)
+grow_internal_buffer(diesel_buffer *internal_buffer, const int size)
 {
     internal_buffer->max_size += size;
     internal_buffer->buf = (char *)realloc(internal_buffer->buf, internal_buffer->max_size);
     internal_buffer->current_pos = (internal_buffer->buf + internal_buffer->current_size);
+}
+
+void
+shrink_internal_buffer(diesel_buffer *dbuf, const int size)
+{
+    char *tmp = NULL;
+    dbuf->max_size -= size;
+    dbuf->current_size -= size;
+    tmp = (char *)malloc(dbuf->max_size);
+    memcpy(tmp, dbuf->buf + size, dbuf->max_size);
+    free(dbuf->buf);
+    dbuf->buf = tmp;
+    dbuf->current_pos = &(dbuf->buf[dbuf->current_size]);
+}
+
+static void
+diesel_buffer_free(diesel_buffer *buf)
+{
+    free(buf->buf);
+    free(buf);
 }
 
 static PyObject *
@@ -91,35 +112,38 @@ static PyObject *
 Buffer_check(PyObject *self, PyObject *args, PyObject *kw)
 {
     diesel_buffer *buf = ((Buffer *)self)->internal_buffer;
-    char *match;
+    int sz = 0;
+    char *match = NULL;
+    PyObject *res = NULL;
 
     /* XXX beware, broken code to follow!
      *
      * It fails in the following ways:
-     *  1) Only matches a byte terminal; will blow up on anything else.
-     *  2) Uses strlen to find the length of the terminal (embedded NUL will 
+     *  1) Uses strlen to find the length of the BYTES sentinel (embedded NUL will 
      *     kill it).
-     *  3) Doesn't trim the internal *buf and repoint it or *current_pos.
      *
-     * BUT ... it does match a byte terminal (and was hacked together over a
-     * lunch break).
      */
-    match = (char *)memmem(buf->buf, buf->current_size, buf->sentinel.term_bytes, strlen(buf->sentinel.term_bytes));
-    if (match) {
-        int sz = (match - buf->buf) + strlen(buf->sentinel.term_bytes);
-        PyObject *res;
-        res = PyString_FromStringAndSize(buf->buf, sz);
+    switch (buf->mtype) {
+        case BYTES :
+            match = (char *)memmem(buf->buf, buf->current_size, buf->sentinel.term_bytes, strlen(buf->sentinel.term_bytes));
+            if (match) {
+                sz = (match - buf->buf) + strlen(buf->sentinel.term_bytes);
+                res = PyString_FromStringAndSize(buf->buf, sz);
+            } 
+            break;
+        case INT :
+            sz = buf->sentinel.term_int;
+            if (buf->current_size >= sz) {
+                res = PyString_FromStringAndSize(buf->buf, sz);
+            }
+            break;
+    }
+    if (res) {
+        shrink_internal_buffer(buf, sz);
         return res;
     } else {
         return Py_None;
     }
-}
-
-static void
-diesel_buffer_free(diesel_buffer *buf)
-{
-    free(buf->buf);
-    free(buf);
 }
 
 static void
