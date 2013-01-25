@@ -74,6 +74,46 @@ diesel_buffer_free(diesel_buffer *buf)
 }
 
 static PyObject *
+diesel_buffer_check(diesel_buffer *buf) {
+    int sz = 0, term_sz;
+    char *match = NULL;
+    PyObject *res = NULL;
+
+    switch (buf->mtype) {
+        case BYTES :
+            term_sz = (int)buf->sentinel.term_bytes[0];
+            match = (char *)memmem(buf->buf, buf->current_size, buf->sentinel.term_bytes+1, term_sz);
+            if (match) {
+                sz = (match - buf->buf) + term_sz;
+                res = PyString_FromStringAndSize(buf->buf, sz);
+            } 
+            break;
+        case INT :
+            sz = buf->sentinel.term_int;
+            if (buf->current_size >= sz) {
+                res = PyString_FromStringAndSize(buf->buf, sz);
+            }
+            break;
+        case ANY :
+            sz = buf->current_size;
+            if (sz > 0) {
+                res = PyString_FromStringAndSize(buf->buf, sz);
+            }
+            break;
+        case UNSET :
+            Py_RETURN_NONE;
+    }
+    if (res) {
+        shrink_internal_buffer(buf, sz);
+        buf->mtype = UNSET;
+        buf->sentinel.term_unset = 1;
+        return res;
+    } else {
+        Py_RETURN_NONE;
+    }
+}
+
+static PyObject *
 Buffer_feed(PyObject *self, PyObject *args, PyObject *kw)
 {
     char *s;
@@ -88,7 +128,8 @@ Buffer_feed(PyObject *self, PyObject *args, PyObject *kw)
     memcpy(buf->internal_buffer->current_pos, s, size);
     buf->internal_buffer->current_size += size;
     buf->internal_buffer->current_pos += size;
-    return Py_None;
+
+    return diesel_buffer_check(buf->internal_buffer);
 }
 
 static PyObject *
@@ -108,50 +149,28 @@ Buffer_set_term(PyObject *self, PyObject *args, PyObject *kw)
     } else if (PyInt_Check(term)) {
         buf->internal_buffer->mtype = INT;
         buf->internal_buffer->sentinel.term_int = PyInt_AsLong(term);
+    } else {
+        // XXX kind of a hack - treat any other PyObject as BufAny ...
+        buf->internal_buffer->mtype = ANY;
+        buf->internal_buffer->sentinel.term_any = 1;
     }
-    return Py_None;
+    Py_RETURN_NONE;
+}
+
+static PyObject *
+Buffer_clear_term(PyObject *self, PyObject *args, PyObject *kw)
+{
+    diesel_buffer *buf = ((Buffer *)self)->internal_buffer;
+    buf->mtype = UNSET;
+    buf->sentinel.term_unset = 1;
+    Py_RETURN_NONE;
 }
 
 static PyObject *
 Buffer_check(PyObject *self, PyObject *args, PyObject *kw)
 {
     diesel_buffer *buf = ((Buffer *)self)->internal_buffer;
-    int sz = 0, term_sz;
-    char *match = NULL;
-    PyObject *res = NULL;
-
-    /* XXX beware, broken code to follow!
-     *
-     * It fails in the following ways:
-     *  1) It does not handle the ANY sentinel.
-     *
-     */
-    switch (buf->mtype) {
-        case BYTES :
-            term_sz = (int)buf->sentinel.term_bytes[0];
-            match = (char *)memmem(buf->buf, buf->current_size, buf->sentinel.term_bytes+1, term_sz);
-            if (match) {
-                sz = (match - buf->buf) + term_sz;
-                res = PyString_FromStringAndSize(buf->buf, sz);
-            } 
-            break;
-        case INT :
-            sz = buf->sentinel.term_int;
-            if (buf->current_size >= sz) {
-                res = PyString_FromStringAndSize(buf->buf, sz);
-            }
-            break;
-        case UNSET :
-            return Py_None;
-    }
-    if (res) {
-        shrink_internal_buffer(buf, sz);
-        buf->mtype = UNSET;
-        buf->sentinel.term_unset = 1;
-        return res;
-    } else {
-        return Py_None;
-    }
+    return diesel_buffer_check(buf);
 }
 
 static void
@@ -211,6 +230,9 @@ static PyMethodDef Buffer_methods[] = {
     },
     {"check", (PyCFunction)Buffer_check, METH_NOARGS,
         "Check to see if the current terminal is present in the buffer"
+    },
+    {"clear_term", (PyCFunction)Buffer_clear_term, METH_NOARGS,
+        "Clear the current sentinel"
     },
     {NULL}
 };
