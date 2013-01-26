@@ -8,13 +8,14 @@ typedef struct diesel_buffer {
     enum match_types mtype;
     union {
         long term_int;
-        char term_bytes[33];
+        char term_bytes[32];
         BufAny term_any;
         Unset term_unset;
     } sentinel;
-    char *buf;
     int current_size;
-    char *current_pos;
+    char *start;
+    char *head;
+    char *tail;
     int max_size;
 } diesel_buffer;
 
@@ -23,7 +24,7 @@ typedef struct {
     diesel_buffer *internal_buffer;
 } Buffer;
 
-void grow_internal_buffer(diesel_buffer *internal_buffer, const int size);
+int grow_internal_buffer(diesel_buffer *internal_buffer, const int size);
 void shrink_internal_buffer(diesel_buffer *internal_buffer, const int size);
 
 struct diesel_buffer *
@@ -39,36 +40,45 @@ diesel_buffer_alloc(int startsize)
     buf->mtype = UNSET;
     buf->sentinel.term_unset = 1;
     buf->current_size = 0;
-    buf->current_pos = buf->buf;
+    buf->tail = buf->head = buf->start;
     buf->max_size = startsize;
     return buf;
 }
 
-void
+int
 grow_internal_buffer(diesel_buffer *internal_buffer, const int size)
 {
+    size_t head_offset, tail_offset;
+    char *tmp;
     internal_buffer->max_size += size;
-    internal_buffer->buf = (char *)realloc(internal_buffer->buf, internal_buffer->max_size);
-    internal_buffer->current_pos = (internal_buffer->buf + internal_buffer->current_size);
+    head_offset = internal_buffer->head - internal_buffer->start;
+    tail_offset = internal_buffer->tail - internal_buffer->start;
+    tmp = realloc(internal_buffer->start, internal_buffer->max_size);
+    if (!tmp) {
+        return -1;
+    }
+    internal_buffer->start = tmp;
+    internal_buffer->head = (tmp + head_offset);
+    internal_buffer->tail = (tmp + tail_offset);
+    return 0;
 }
 
 void
 shrink_internal_buffer(diesel_buffer *dbuf, const int size)
 {
-    char *tmp = NULL;
-    dbuf->max_size -= size;
+    dbuf->head += size;
     dbuf->current_size -= size;
-    tmp = (char *)malloc(dbuf->max_size);
-    memcpy(tmp, dbuf->buf + size, dbuf->max_size);
-    free(dbuf->buf);
-    dbuf->buf = tmp;
-    dbuf->current_pos = &(dbuf->buf[dbuf->current_size]);
+    if (dbuf->current_size == 0) {
+        dbuf->head = dbuf->tail = dbuf->start;
+    } 
+    //memmove(dbuf->head, dbuf->head + size, dbuf->max_size);
+    //dbuf->tail = &(dbuf->head[dbuf->current_size]);
 }
 
 static void
 diesel_buffer_free(diesel_buffer *buf)
 {
-    free(buf->buf);
+    free(buf->start);
     free(buf);
 }
 
@@ -81,22 +91,22 @@ diesel_buffer_check(diesel_buffer *buf) {
     switch (buf->mtype) {
         case BYTES :
             term_sz = (int)buf->sentinel.term_bytes[0];
-            match = (char *)memmem(buf->buf, buf->current_size, buf->sentinel.term_bytes+1, term_sz);
+            match = (char *)memmem(buf->head, buf->current_size, buf->sentinel.term_bytes+1, term_sz);
             if (match) {
-                sz = (match - buf->buf) + term_sz;
-                res = PyString_FromStringAndSize(buf->buf, sz);
+                sz = (match - buf->head) + term_sz;
+                res = PyString_FromStringAndSize(buf->head, sz);
             } 
             break;
         case INT :
             sz = buf->sentinel.term_int;
             if (buf->current_size >= sz) {
-                res = PyString_FromStringAndSize(buf->buf, sz);
+                res = PyString_FromStringAndSize(buf->head, sz);
             }
             break;
         case ANY :
             sz = buf->current_size;
             if (sz > 0) {
-                res = PyString_FromStringAndSize(buf->buf, sz);
+                res = PyString_FromStringAndSize(buf->head, sz);
             }
             break;
         case UNSET :
@@ -120,13 +130,16 @@ Buffer_feed(PyObject *self, PyObject *args, PyObject *kw)
     Buffer *buf = (Buffer *)self;
 
     PyArg_ParseTuple(args, "s#", &s, &size);
+    size_t current_use = buf->internal_buffer->tail - buf->internal_buffer->start;
 
-    if (size + buf->internal_buffer->current_size >= buf->internal_buffer->max_size) {
+    if (size + current_use > buf->internal_buffer->max_size) {
         grow_internal_buffer(buf->internal_buffer, size);
     }
-    memcpy(buf->internal_buffer->current_pos, s, size);
+    if (!(memcpy(buf->internal_buffer->tail, s, size))) {
+        return NULL;
+    }
     buf->internal_buffer->current_size += size;
-    buf->internal_buffer->current_pos += size;
+    buf->internal_buffer->tail += size;
 
     return diesel_buffer_check(buf->internal_buffer);
 }
@@ -186,7 +199,7 @@ Buffer_repr(PyObject *self)
     PyObject *payload, *res, *fmt, *fmtargs;
     diesel_buffer *buf;
     buf = ((Buffer *)self)->internal_buffer;
-    payload = PyString_FromStringAndSize(buf->buf, buf->current_size);
+    payload = PyString_FromStringAndSize(buf->head, buf->current_size);
     assert(payload);
     fmtargs = PyTuple_Pack(1, payload);
     fmt = PyString_FromString("Buffer(%r)");
