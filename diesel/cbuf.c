@@ -30,13 +30,12 @@ struct diesel_buffer *
 diesel_buffer_alloc(int startsize)
 {
     diesel_buffer *buf;
-    if (!(buf = (diesel_buffer *)malloc(sizeof(diesel_buffer))))
+    if (!(buf = malloc(sizeof(diesel_buffer))))
         return NULL;
-    if (!(buf->buf = (char *)malloc(sizeof(char) * startsize))) {
+    if (!(buf->start = malloc(startsize))) {
         free(buf);
         return NULL;
     }
-    buf->buf[0] = '\0';
     buf->mtype = UNSET;
     buf->sentinel.term_unset = 1;
     buf->current_size = 0;
