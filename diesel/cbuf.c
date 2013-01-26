@@ -241,10 +241,14 @@ Buffer_init(PyObject *self, PyObject *args, PyObject *kw)
     int startsize;
     PyArg_ParseTuple(args, "i", &startsize);
 
-    diesel_buffer *buf;
-    if (!(buf = diesel_buffer_alloc(startsize)))
-        return -1;
-    ((Buffer *)self)->internal_buffer = buf;
+    diesel_buffer *ib;
+    Buffer *buf = (Buffer *)self;
+    if (!buf->internal_buffer) {
+        if (!(ib = diesel_buffer_alloc(startsize))) {
+            return -1;
+        }
+        buf->internal_buffer = ib;
+    }
     return 0;
 }
 
