@@ -145,6 +145,21 @@ Buffer_feed(PyObject *self, PyObject *args, PyObject *kw)
 }
 
 static PyObject *
+Buffer_pop(PyObject *self, PyObject *args, PyObject *kw)
+{
+    PyObject *res;
+    diesel_buffer *buf = ((Buffer *)self)->internal_buffer;
+    size_t sz = buf->current_size;
+    if (sz > 0) {
+        res = PyString_FromStringAndSize(buf->head, sz);
+        shrink_internal_buffer(buf, sz);
+        return res;
+    } else {
+        Py_RETURN_NONE;
+    }
+}
+
+static PyObject *
 Buffer_set_term(PyObject *self, PyObject *args, PyObject *kw)
 {
     PyObject *term;
@@ -245,6 +260,9 @@ static PyMethodDef Buffer_methods[] = {
     },
     {"clear_term", (PyCFunction)Buffer_clear_term, METH_NOARGS,
         "Clear the current sentinel"
+    },
+    {"pop", (PyCFunction)Buffer_pop, METH_NOARGS,
+        "Clear and return the full contents of the buffer"
     },
     {NULL}
 };
