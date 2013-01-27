@@ -12,11 +12,12 @@ typedef struct diesel_buffer {
         BufAny term_any;
         Unset term_unset;
     } sentinel;
-    int current_size;
     char *start;
     char *head;
     char *tail;
+    int current_size;
     int max_size;
+    int alloc_size;
 } diesel_buffer;
 
 typedef struct {
@@ -42,15 +43,17 @@ diesel_buffer_alloc(int startsize)
     buf->current_size = 0;
     buf->tail = buf->head = buf->start;
     buf->max_size = startsize;
+    buf->alloc_size = startsize;
     return buf;
 }
 
 int
 grow_internal_buffer(diesel_buffer *internal_buffer, const int size)
 {
-    size_t head_offset, tail_offset;
+    size_t head_offset, tail_offset, growth;
     char *tmp;
-    internal_buffer->max_size += size;
+    growth = size < internal_buffer->alloc_size ? internal_buffer->alloc_size : internal_buffer->alloc_size + size;
+    internal_buffer->max_size += growth;
     head_offset = internal_buffer->head - internal_buffer->start;
     tail_offset = internal_buffer->tail - internal_buffer->start;
     tmp = realloc(internal_buffer->start, internal_buffer->max_size);
