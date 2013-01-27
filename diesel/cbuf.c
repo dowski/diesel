@@ -1,8 +1,8 @@
 #include <Python.h>
 
 enum match_types {UNSET, BYTES, INT, ANY};
-typedef int BufAny;
-typedef int Unset;
+typedef short BufAny;
+typedef short Unset;
 
 typedef struct diesel_buffer {
     enum match_types mtype;
@@ -15,9 +15,9 @@ typedef struct diesel_buffer {
     char *start;
     char *head;
     char *tail;
-    int current_size;
-    int max_size;
-    int alloc_size;
+    size_t current_size;
+    size_t max_size;
+    size_t alloc_size;
 } diesel_buffer;
 
 typedef struct {
@@ -25,11 +25,11 @@ typedef struct {
     diesel_buffer *internal_buffer;
 } Buffer;
 
-int grow_internal_buffer(diesel_buffer *internal_buffer, const int size);
-void shrink_internal_buffer(diesel_buffer *internal_buffer, const int size);
+int grow_internal_buffer(diesel_buffer *internal_buffer, const size_t size);
+void shrink_internal_buffer(diesel_buffer *internal_buffer, const size_t size);
 
 struct diesel_buffer *
-diesel_buffer_alloc(int startsize)
+diesel_buffer_alloc(size_t startsize)
 {
     diesel_buffer *buf;
     if (!(buf = malloc(sizeof(diesel_buffer))))
@@ -48,7 +48,7 @@ diesel_buffer_alloc(int startsize)
 }
 
 int
-grow_internal_buffer(diesel_buffer *internal_buffer, const int size)
+grow_internal_buffer(diesel_buffer *internal_buffer, const size_t size)
 {
     size_t head_offset, tail_offset, growth;
     char *tmp;
@@ -67,7 +67,7 @@ grow_internal_buffer(diesel_buffer *internal_buffer, const int size)
 }
 
 void
-shrink_internal_buffer(diesel_buffer *dbuf, const int size)
+shrink_internal_buffer(diesel_buffer *dbuf, const size_t size)
 {
     dbuf->head += size;
     dbuf->current_size -= size;
@@ -87,13 +87,14 @@ diesel_buffer_free(diesel_buffer *buf)
 
 static PyObject *
 diesel_buffer_check(diesel_buffer *buf) {
-    int sz = 0, term_sz;
+    size_t sz = 0;
+    short term_sz;
     char *match = NULL;
     PyObject *res = NULL;
 
     switch (buf->mtype) {
         case BYTES :
-            term_sz = (int)buf->sentinel.term_bytes[0];
+            term_sz = (short)buf->sentinel.term_bytes[0];
             match = (char *)memmem(buf->head, buf->current_size, buf->sentinel.term_bytes+1, term_sz);
             if (match) {
                 sz = (match - buf->head) + term_sz;
@@ -129,7 +130,7 @@ static PyObject *
 Buffer_feed(PyObject *self, PyObject *args, PyObject *kw)
 {
     char *s;
-    int size;
+    size_t size;
     Buffer *buf = (Buffer *)self;
 
     PyArg_ParseTuple(args, "s#", &s, &size);
@@ -241,8 +242,8 @@ Buffer_repr(PyObject *self)
 static int
 Buffer_init(PyObject *self, PyObject *args, PyObject *kw)
 {
-    int startsize;
-    PyArg_ParseTuple(args, "i", &startsize);
+    size_t startsize;
+    PyArg_ParseTuple(args, "l", &startsize);
 
     diesel_buffer *ib;
     Buffer *buf = (Buffer *)self;
