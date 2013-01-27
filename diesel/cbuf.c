@@ -137,7 +137,9 @@ Buffer_feed(PyObject *self, PyObject *args, PyObject *kw)
     size_t current_use = buf->internal_buffer->tail - buf->internal_buffer->start;
 
     if (size + current_use > buf->internal_buffer->max_size) {
-        grow_internal_buffer(buf->internal_buffer, size);
+        if (grow_internal_buffer(buf->internal_buffer, size) < 0) {
+            return NULL;
+        }
     }
     if (!(memcpy(buf->internal_buffer->tail, s, size))) {
         return NULL;
