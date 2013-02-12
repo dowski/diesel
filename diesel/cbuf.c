@@ -28,6 +28,9 @@ typedef struct {
 int grow_internal_buffer(diesel_buffer *internal_buffer, const size_t size);
 void shrink_internal_buffer(diesel_buffer *internal_buffer, const size_t size);
 
+static long buffer_moves = 0;
+static long max_buf_size = 0;
+
 struct diesel_buffer *
 diesel_buffer_alloc(size_t startsize)
 {
@@ -63,6 +66,9 @@ grow_internal_buffer(diesel_buffer *internal_buffer, const size_t size)
     internal_buffer->start = tmp;
     internal_buffer->head = (tmp + head_offset);
     internal_buffer->tail = (tmp + tail_offset);
+    if (internal_buffer->max_size > max_buf_size) {
+        max_buf_size = internal_buffer->max_size;
+    }
     return 0;
 }
 
@@ -73,9 +79,12 @@ shrink_internal_buffer(diesel_buffer *dbuf, const size_t size)
     dbuf->current_size -= size;
     if (dbuf->current_size == 0) {
         dbuf->head = dbuf->tail = dbuf->start;
-    } 
-    //memmove(dbuf->head, dbuf->head + size, dbuf->max_size);
-    //dbuf->tail = &(dbuf->head[dbuf->current_size]);
+    } else if (dbuf->head - dbuf->start >= dbuf->current_size) {
+        memmove(dbuf->start, dbuf->head, dbuf->current_size);
+        dbuf->head = dbuf->start;
+        dbuf->tail = dbuf->start + dbuf->current_size;
+        buffer_moves++;
+    }
 }
 
 static void
@@ -319,7 +328,20 @@ static PyTypeObject diesel_Buffer = {
     0,//Buffer_new,
 };
 
+PyObject *
+cbuf_stats(PyObject *self, PyObject *args)
+{
+    PyObject *val = NULL;
+    if (!(val = Py_BuildValue("ll", buffer_moves, max_buf_size))) {
+        return;
+    }
+    return val;
+}
+
 static PyMethodDef cbuf_methods[] = {
+    {"get_stats", (PyCFunction)cbuf_stats, METH_NOARGS,
+        "Get internal buffer stats"
+    },
     {NULL}
 };
 
