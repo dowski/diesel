@@ -53,5 +53,11 @@ Other bundled protocols include MongoDB, Riak, and Redis client libraries.
         "http-parser >= 0.7.12",
         "dnspython",
     ] + additional_requires),
-    ext_modules=[Extension("diesel.cbuf", ["diesel/cbuf.c"])],
+    ext_modules=[
+        Extension(
+            "diesel.cbuf",
+            ["diesel/cbuf.c"],
+            extra_compile_args=["-Wall", "-Werror"],
+        ),
+    ],
     )
