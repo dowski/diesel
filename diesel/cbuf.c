@@ -1,3 +1,4 @@
+#define PY_SSIZE_T_CLEAN
 #include <Python.h>
 
 enum match_types {UNSET, BYTES, INT, ANY};
@@ -139,7 +140,7 @@ static PyObject *
 Buffer_feed(PyObject *self, PyObject *args, PyObject *kw)
 {
     char *s;
-    size_t size;
+    Py_ssize_t size = 0;
     Buffer *buf = (Buffer *)self;
 
     PyArg_ParseTuple(args, "s#", &s, &size);
@@ -164,7 +165,7 @@ Buffer_pop(PyObject *self, PyObject *args, PyObject *kw)
 {
     PyObject *res;
     diesel_buffer *buf = ((Buffer *)self)->internal_buffer;
-    size_t sz = buf->current_size;
+    Py_ssize_t sz = buf->current_size;
     if (sz > 0) {
         res = PyString_FromStringAndSize(buf->head, sz);
         shrink_internal_buffer(buf, sz);
@@ -253,7 +254,7 @@ Buffer_repr(PyObject *self)
 static int
 Buffer_init(PyObject *self, PyObject *args, PyObject *kw)
 {
-    size_t startsize;
+    size_t startsize = 0;
     PyArg_ParseTuple(args, "l", &startsize);
 
     diesel_buffer *ib;
