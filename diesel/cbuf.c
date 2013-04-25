@@ -26,13 +26,13 @@ typedef struct {
     diesel_buffer *internal_buffer;
 } Buffer;
 
-int grow_internal_buffer(diesel_buffer *internal_buffer, const size_t size);
-void shrink_internal_buffer(diesel_buffer *internal_buffer, const size_t size);
+static int grow_internal_buffer(diesel_buffer *internal_buffer, const size_t size);
+static void shrink_internal_buffer(diesel_buffer *internal_buffer, const size_t size);
 
 static long buffer_moves = 0;
 static long max_buf_size = 0;
 
-struct diesel_buffer *
+static diesel_buffer *
 diesel_buffer_alloc(size_t startsize)
 {
     diesel_buffer *buf;
@@ -51,7 +51,7 @@ diesel_buffer_alloc(size_t startsize)
     return buf;
 }
 
-int
+static int
 grow_internal_buffer(diesel_buffer *internal_buffer, const size_t size)
 {
     size_t head_offset, tail_offset, growth;
@@ -73,7 +73,7 @@ grow_internal_buffer(diesel_buffer *internal_buffer, const size_t size)
     return 0;
 }
 
-void
+static void
 shrink_internal_buffer(diesel_buffer *dbuf, const size_t size)
 {
     dbuf->head += size;
