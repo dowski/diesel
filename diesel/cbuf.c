@@ -250,15 +250,16 @@ Buffer_repr(PyObject *self)
     return res;
 }
 
-//static PyObject *
-//Buffer_new(PyTypeObject *type, PyObject *args, PyObject *kw)
-//{
-//    Buffer *self;
-//
-//    self->internal_buffer = NULL;
-//
-//    return (PyObject *)self;
-//}
+static PyObject *
+Buffer_new(PyTypeObject *type, PyObject *args, PyObject *kw)
+{
+    Buffer *self;
+    self = (Buffer *)type->tp_alloc(type, 0);
+
+    self->internal_buffer = NULL;
+
+    return (PyObject *)self;
+}
 
 static int
 Buffer_init(PyObject *self, PyObject *args, PyObject *kw)
@@ -268,7 +269,7 @@ Buffer_init(PyObject *self, PyObject *args, PyObject *kw)
 
     diesel_buffer *ib;
     Buffer *buf = (Buffer *)self;
-    if (!buf->internal_buffer) {
+    if (!(buf->internal_buffer)) {
         if (!(ib = diesel_buffer_alloc(startsize))) {
             return -1;
         }
@@ -335,7 +336,7 @@ static PyTypeObject diesel_Buffer = {
     0,                         /* tp_dictoffset */
     (initproc)Buffer_init,      /* tp_init */
     0,
-    0,//Buffer_new,
+    Buffer_new,
 };
 
 PyObject *
