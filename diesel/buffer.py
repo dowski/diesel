@@ -1,4 +1,7 @@
 # vim:ts=4:sw=4:expandtab
+import os
+
+
 class BufAny(object):
     pass
 
@@ -77,3 +80,8 @@ class Buffer(object):
     @property
     def has_data(self):
         return bool(self._atinbuf)
+
+if os.environ.get('DIESEL_C_BUFFER', '').lower() in ['1', 'yes', 'true']:
+    import diesel.cbuf
+    def Buffer():
+        return diesel.cbuf.Buffer(1048576)
