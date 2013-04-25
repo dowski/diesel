@@ -84,4 +84,4 @@ class Buffer(object):
 if os.environ.get('DIESEL_C_BUFFER', '').lower() in ['1', 'yes', 'true']:
     import diesel.cbuf
     def Buffer():
-        return diesel.cbuf.Buffer(1048576)
+        return diesel.cbuf.Buffer(65536)
