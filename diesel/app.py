@@ -2,6 +2,7 @@
 '''The main Application and Service classes
 '''
 import os
+import gc
 import cProfile
 from OpenSSL import SSL
 import socket
@@ -47,6 +48,13 @@ class Application(object):
         or .halt() is called.
         '''
         profile = os.environ.get('DIESEL_PROFILE', '').lower() in YES_PROFILE
+        track_gc = os.environ.get('TRACK_GC', '').lower() in YES_PROFILE
+        track_gc_leaks = os.environ.get('TRACK_GC_LEAKS', '').lower() in YES_PROFILE
+        if track_gc:
+            gc.set_debug(gc.DEBUG_STATS)
+        if track_gc_leaks:
+            gc.set_debug(gc.DEBUG_LEAK)
+
         self._run = True
         log.warning('Starting diesel <{0}>', self.hub.describe)
 
@@ -114,11 +122,14 @@ class Application(object):
         else:
             self._services.append(service)
 
-    def add_loop(self, loop, front=False, keep_alive=False):
+    def add_loop(self, loop, front=False, keep_alive=False, track=False):
         '''Add a Loop instance to this Application.
 
         The loop will be started when the Application is run().
         '''
+        if track:
+            loop.enable_tracking()
+
         if keep_alive:
             loop.keep_alive = True
 
@@ -150,7 +161,7 @@ class Service(object):
     implemented by a passed connection handler.
     '''
     LQUEUE_SIZ = 500
-    def __init__(self, connection_handler, port, iface='', ssl_ctx=None):
+    def __init__(self, connection_handler, port, iface='', ssl_ctx=None, track=False):
         '''Given a protocol-implementing callable `connection_handler`,
         handle connections on port `port`.
 
@@ -162,6 +173,7 @@ class Service(object):
         self.connection_handler = connection_handler
         self.application = None
         self.ssl_ctx = ssl_ctx
+        self.track = track
         # Call this last so the connection_handler has a fully-instantiated
         # Service instance at its disposal.
         if hasattr(connection_handler, 'on_service_init'):
@@ -212,7 +224,7 @@ class Service(object):
             c = Connection(sock, addr)
             l = Loop(self.connection_handler, addr)
             l.connection_stack.append(c)
-            runtime.current_app.add_loop(l)
+            runtime.current_app.add_loop(l, track=self.track)
         if self.ssl_ctx:
             sock = SSL.Connection(self.ssl_ctx, sock)
             sock.set_accept_state()

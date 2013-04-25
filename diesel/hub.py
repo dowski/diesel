@@ -20,8 +20,11 @@ import os
 import thread
 
 from collections import deque
+from operator import attrgetter
 from time import time
 from Queue import Queue, Empty
+
+TRIGGER_COMPARE = attrgetter('trigger_time')
 
 class Timer(object):
     '''A timer is a promise to call some function at a future date.
@@ -46,7 +49,7 @@ class Timer(object):
 
     def callback(self):
         '''When the external entity checks this timer and determines
-        it's due, this function is called, which calls the original 
+        it's due, this function is called, which calls the original
         callback.
         '''
         self.pending = False
@@ -58,13 +61,10 @@ class Timer(object):
     def due(self):
         '''Is it time to run this timer yet?
 
-        The allowance provides some give-and-take so that if a 
+        The allowance provides some give-and-take so that if a
         sleep() delay comes back a little early, we still go.
         '''
         return (self.trigger_time - time()) < self.ALLOWANCE
-
-    def __cmp__(self, o):
-        return cmp(self.trigger_time, o.trigger_time)
 
 class _PipeWrap(object):
     def __init__(self, p):
@@ -77,7 +77,7 @@ class IntWrap(_PipeWrap): pass
 
 class AbstractEventHub(object):
     def __init__(self):
-        self.timers = deque()
+        self.timers = []
         self.new_timers = []
         self.run = True
         self.events = {}
@@ -109,7 +109,7 @@ class AbstractEventHub(object):
     def remove_timer(self, t):
         try:
             self.timers.remove(t)
-        except ValueError:
+        except IndexError:
             pass
 
     def run_in_thread(self, reschedule, f, *args, **kw):
@@ -221,34 +221,31 @@ class EPollEventHub(AbstractEventHub):
         '''
         while self.run_now and self.run:
             self.run_now.popleft()()
-        
+
         if self.new_timers:
             for tr in self.new_timers:
                 if tr.pending:
                     tr.inq = True
                     self.timers.append(tr)
-            self.timers = deque(sorted(self.timers))
+            self.timers.sort(key=TRIGGER_COMPARE, reverse=True)
             self.new_timers = []
 
         tm = time()
-        timeout = (self.timers[0].trigger_time - tm) if self.timers else 1e6
+        timeout = (self.timers[-1].trigger_time - tm) if self.timers else 1e6
         # epoll, etc, limit to 2^^31/1000 or OverflowError
         timeout = min(timeout, 1e6)
         if timeout < 0 or self.reschedule:
             timeout = 0
 
         # Run timers first, to try to nail their timings
-        while self.timers:
-            if self.timers[0].due:
-                t = self.timers.popleft()
-                if t.pending:
-                    t.callback()
-                    while self.run_now and self.run:
-                        self.run_now.popleft()()
-                    if not self.run:
-                        return
-            else:
-                break
+        while self.timers and self.timers[-1].due:
+            t = self.timers.pop()
+            if t.pending:
+                t.callback()
+                while self.run_now and self.run:
+                    self.run_now.popleft()()
+                if not self.run:
+                    return
 
         # Handle all socket I/O
         try:
@@ -404,8 +401,8 @@ class LibEvHub(AbstractEventHub):
         wev.stop()
 
 # Expose a usable EventHub implementation
-if (os.environ.get('DIESEL_LIBEV') or 
-    os.environ.get('DIESEL_NO_EPOLL') or 
+if (os.environ.get('DIESEL_LIBEV') or
+    os.environ.get('DIESEL_NO_EPOLL') or
     not hasattr(select, 'epoll')):
     assert have_libev, "if you don't have select.epoll (not on linux?), please install pyev!"
     EventHub = LibEvHub

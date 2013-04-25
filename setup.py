@@ -9,7 +9,7 @@ if os.system("which palmc > /dev/null 2>&1") == 0:
 
 additional_requires = []
 
-VERSION = "3.0.11"
+VERSION = "3.0.19"
 
 setup(name="diesel",
     version=VERSION,
@@ -35,7 +35,13 @@ Other bundled protocols include MongoDB, Riak, and Redis client libraries.
 ''',
     url="http://diesel.io",
     download_url="http://jamwt.com/diesel/diesel-%s.tar.gz" % VERSION,
-    packages=["diesel", "diesel.protocols", "diesel.util", "diesel.util.patches"],
+    packages=[
+        "diesel",
+        "diesel.protocols",
+        "diesel.util",
+        "diesel.util.patches",
+        "diesel.protocols.http",
+    ],
     scripts=["examples/dhttpd"],
     entry_points={
         'console_scripts': [
