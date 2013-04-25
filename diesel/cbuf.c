@@ -141,23 +141,25 @@ Buffer_feed(PyObject *self, PyObject *args, PyObject *kw)
 {
     char *s;
     Py_ssize_t size = 0;
-    Buffer *buf = (Buffer *)self;
+    diesel_buffer *buf = ((Buffer *)self)->internal_buffer;
 
     PyArg_ParseTuple(args, "s#", &s, &size);
-    size_t current_use = buf->internal_buffer->tail - buf->internal_buffer->start;
+    size_t current_use = buf->tail - buf->start;
 
-    if (size + current_use > buf->internal_buffer->max_size) {
-        if (grow_internal_buffer(buf->internal_buffer, size) < 0) {
+    if (size + current_use > buf->max_size) {
+        if (grow_internal_buffer(buf, size) < 0) {
+            PyErr_SetString(PyExc_RuntimeError, "Failed to grow buffer");
             return NULL;
         }
     }
-    if (!(memcpy(buf->internal_buffer->tail, s, size))) {
+    if (!(memcpy(buf->tail, s, size))) {
+        PyErr_SetString(PyExc_RuntimeError, "Failed to copy memory");
         return NULL;
     }
-    buf->internal_buffer->current_size += size;
-    buf->internal_buffer->tail += size;
+    buf->current_size += size;
+    buf->tail += size;
 
-    return diesel_buffer_check(buf->internal_buffer);
+    return diesel_buffer_check(buf);
 }
 
 static PyObject *
@@ -180,22 +182,22 @@ Buffer_set_term(PyObject *self, PyObject *args, PyObject *kw)
 {
     PyObject *term;
     PyArg_ParseTuple(args, "O", &term);
-    Buffer *buf = (Buffer *)self;
+    diesel_buffer *buf = ((Buffer *)self)->internal_buffer;
 
-    if (PyString_Check(term)) {
+    if (PyInt_Check(term)) {
+        buf->mtype = INT;
+        buf->sentinel.term_int = PyInt_AsLong(term);
+    } else if (PyString_Check(term)) {
         Py_ssize_t sz;
         char *term_val = NULL;
-        buf->internal_buffer->mtype = BYTES;
+        buf->mtype = BYTES;
         PyString_AsStringAndSize(term, &term_val, &sz);
-        buf->internal_buffer->sentinel.term_bytes[0] = (char)sz;
-        memcpy(buf->internal_buffer->sentinel.term_bytes+1, term_val, sz);
-    } else if (PyInt_Check(term)) {
-        buf->internal_buffer->mtype = INT;
-        buf->internal_buffer->sentinel.term_int = PyInt_AsLong(term);
+        buf->sentinel.term_bytes[0] = (char)sz;
+        memcpy(buf->sentinel.term_bytes+1, term_val, sz);
     } else {
         // XXX kind of a hack - treat any other PyObject as BufAny ...
-        buf->internal_buffer->mtype = ANY;
-        buf->internal_buffer->sentinel.term_any = 1;
+        buf->mtype = ANY;
+        buf->sentinel.term_any = 1;
     }
     Py_RETURN_NONE;
 }
