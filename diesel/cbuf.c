@@ -142,6 +142,13 @@ Buffer_feed(PyObject *self, PyObject *args, PyObject *kw)
     char *s;
     Py_ssize_t size = 0;
     diesel_buffer *buf = ((Buffer *)self)->internal_buffer;
+    if (buf->mtype == ANY && !(buf->current_size)) {
+        buf->mtype = UNSET;
+        buf->sentinel.term_unset = 1;
+        PyObject *res = PyTuple_GetItem(args, (Py_ssize_t)0);
+        Py_INCREF(res);
+        return res;
+    }
 
     PyArg_ParseTuple(args, "s#", &s, &size);
     size_t current_use = buf->tail - buf->start;
