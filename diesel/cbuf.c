@@ -343,7 +343,7 @@ cbuf_stats(PyObject *self, PyObject *args)
 {
     PyObject *val = NULL;
     if (!(val = Py_BuildValue("ll", buffer_moves, max_buf_size))) {
-        return;
+        return NULL;
     }
     return val;
 }
