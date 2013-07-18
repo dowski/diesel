@@ -29,7 +29,7 @@ class Application(object):
     def __init__(self, allow_app_replacement=False):
         assert (allow_app_replacement or runtime.current_app is None), "Only one Application instance per program allowed"
         runtime.current_app = self
-        self.hub = None
+        self.hub = EventHub()
         self.waits = WaitPool()
         self._run = False
         self._services = []
@@ -68,9 +68,9 @@ class Application(object):
                 # This is a forked process - don't keep looping!
                 break
 
-        # Create the event hub here so that each process gets its own low-level
-        # event instance (e.g. epoll).
-        self.hub = EventHub()
+        # Start the async I/O subsystem here so that each process gets its
+        # own instance (e.g. epoll).
+        self.hub.init_io_subsystem()
 
         # Register services so they accept connections, etc.
         for s in self._services:

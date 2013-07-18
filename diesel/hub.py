@@ -83,7 +83,6 @@ class AbstractEventHub(object):
         self.events = {}
         self.run_now = deque()
         self.fdmap = {}
-        self._setup_threading()
         self.reschedule = deque()
 
     def _setup_threading(self):
@@ -105,6 +104,16 @@ class AbstractEventHub(object):
                 else:
                     c(v)
         self.register(_PipeWrap(self._t_recv), handle_thread_done, None, None)
+
+    def init_io_subsystem(self):
+        """Do what is needed to initialize the async I/O subsystem.
+
+        The default is to setup threading, which will tie into whatever
+        underlying async I/O subsystem is in use (e.g. epoll). Subclasses
+        should set that up first before calling this superclass method.
+
+        """
+        self._setup_threading()
 
     def remove_timer(self, t):
         try:
@@ -205,8 +214,12 @@ class EPollEventHub(AbstractEventHub):
     '''A epoll-based hub.
     '''
     def __init__(self):
-        self.epoll = select.epoll()
+        self.epoll = None
         super(EPollEventHub, self).__init__()
+
+    def init_io_subsystem(self):
+        self.epoll = select.epoll()
+        super(EPollEventHub, self).init_io_subsystem()
 
     @property
     def describe(self):
