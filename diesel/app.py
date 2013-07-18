@@ -29,7 +29,7 @@ class Application(object):
     def __init__(self, allow_app_replacement=False):
         assert (allow_app_replacement or runtime.current_app is None), "Only one Application instance per program allowed"
         runtime.current_app = self
-        self.hub = EventHub()
+        self.hub = None
         self.waits = WaitPool()
         self._run = False
         self._services = []
@@ -43,7 +43,7 @@ class Application(object):
             self.halt()
         return bail
 
-    def run(self):
+    def run(self, processes=1):
         '''Start up an Application--blocks until the program ends
         or .halt() is called.
         '''
@@ -56,11 +56,27 @@ class Application(object):
             gc.set_debug(gc.DEBUG_LEAK)
 
         self._run = True
-        log.warning('Starting diesel <{0}>', self.hub.describe)
 
+        # Create service sockets
         for s in self._services:
             s.bind_and_listen()
+
+        # Fork for multi-proc (if processes argument > 1)
+        for i in xrange(processes-1):
+            pid = os.fork()
+            if not pid:
+                # This is a forked process - don't keep looping!
+                break
+
+        # Create the event hub here so that each process gets its own low-level
+        # event instance (e.g. epoll).
+        self.hub = EventHub()
+
+        # Register services so they accept connections, etc.
+        for s in self._services:
             s.register(self)
+
+        log.warning('Starting diesel <{0}>', self.hub.describe)
 
         for l in self._loops:
             self.hub.schedule(l.wake)
