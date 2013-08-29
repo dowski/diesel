@@ -161,6 +161,7 @@ class Service(object):
     implemented by a passed connection handler.
     '''
     LQUEUE_SIZ = 500
+    ConnectionClass = Connection
     def __init__(self, connection_handler, port, iface='', ssl_ctx=None, track=False):
         '''Given a protocol-implementing callable `connection_handler`,
         handle connections on port `port`.
@@ -212,16 +213,11 @@ class Service(object):
         return self.sock is not None
 
     def accept_new_connection(self):
-        try:
-            sock, addr = self.sock.accept()
-        except socket.error, e:
-            code, s = e
-            if code in (errno.EAGAIN, errno.EINTR):
-                return
-            raise
-        sock.setblocking(0)
+        sock, addr = self.do_accept()
+        if (sock, addr) == (None, None):
+            return
         def make_connection():
-            c = Connection(sock, addr)
+            c = self.ConnectionClass(sock, addr)
             l = Loop(self.connection_handler, addr)
             l.connection_stack.append(c)
             runtime.current_app.add_loop(l, track=self.track)
@@ -232,6 +228,17 @@ class Service(object):
             ssl_async_handshake(sock, self.application.hub, make_connection)
         else:
             make_connection()
+
+    def do_accept(self):
+        try:
+            sock, addr = self.sock.accept()
+        except socket.error, e:
+            code, s = e
+            if code in (errno.EAGAIN, errno.EINTR):
+                return (None, None)
+            raise
+        sock.setblocking(0)
+        return (sock, addr)
 
 class Thunk(object):
     def __init__(self, c):

@@ -539,6 +539,8 @@ class Loop(object):
         self.hub.schedule(delayed_call, True)
 
 class Connection(object):
+    RECV_FLAGS = 0
+
     def __init__(self, sock, addr):
         self.hub = runtime.current_app.hub
         self.pipeline = pipeline.Pipeline()
@@ -639,7 +641,7 @@ class Connection(object):
         if self.closed:
             return
         try:
-            data = self.sock.recv(BUFSIZ)
+            data = self.sock.recv(BUFSIZ, self.RECV_FLAGS)
         except socket.error, e:
             code, s = e
             if code in (errno.EAGAIN, errno.EINTR):
