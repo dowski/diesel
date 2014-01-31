@@ -103,3 +103,13 @@ class DieselFlask(Flask):
         http_service = self.make_service(*args, **params)
         self.schedule(http_service)
         quickstart(*self.jobs, __app=self.diesel_app)
+
+    @staticmethod
+    def chunk(fn):
+        def wrapper(*args, **kw):
+            resp = fn(*args, **kw)
+            resp.headers['Transfer-Encoding'] = 'chunked'
+            resp.diesel_chunk = True
+            return resp
+        return wrapper
+

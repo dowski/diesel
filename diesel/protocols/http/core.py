@@ -19,8 +19,10 @@ except ImportError:
     from http_parser.pyparser import HttpParser
 
 from diesel import receive, ConnectionClosed, send, log, Client, call, first
+from diesel.buffer import Buffer
 
 SERVER_TAG = 'diesel-http-server'
+CHUNK_SIZE = 4096
 
 hlog = log.name("http-error")
 
@@ -144,15 +146,33 @@ class HttpServer(object):
             resp.headers.set('Content-Length', str(size))
         else:
             sendfile = None
+        chunked = getattr(resp, 'diesel_chunk', False)
 
         send("HTTP/%s %s %s\r\n" % (('%s.%s' % version), resp.status_code, resp.status))
         send(str(resp.headers))
 
         if sendfile:
             send(open(sendfile, 'rb')) # diesel can stream fds
+        elif chunked:
+            chunk_buffer = Buffer()
+            chunk_buffer.set_term(CHUNK_SIZE)
+            for part in resp.iter_encoded():
+                chunk = chunk_buffer.feed(part)
+                while chunk:
+                    send_chunk(chunk)
+                    chunk_buffer.set_term(CHUNK_SIZE)
+                    chunk = chunk_buffer.check()
+            chunk = chunk_buffer.pop()
+            if chunk:
+                send_chunk(chunk)
+            send_chunk('')
         else:
-            for i in resp.iter_encoded():
-                send(i)
+            for part in resp.iter_encoded():
+                send(part)
+
+def send_chunk(chunk):
+    send('%X\r\n' % len(chunk))
+    send('%s\r\n' % chunk)
 
 class HttpRequestTimeout(Exception): pass
 
