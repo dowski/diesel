@@ -1,7 +1,7 @@
 from time import time
 from diesel import fork, fork_child, sleep, quickstart, quickstop, ParentDiedException
-from diesel.hub import Timer
 
+FUDGE = 0.01
 def test_basic_sleep():
     delt = [None]
     STIME = 0.3
@@ -13,8 +13,8 @@ def test_basic_sleep():
     sleep()
     while l_.running:
         sleep()
-    min_bound = (STIME - Timer.ALLOWANCE)
-    max_bound = (STIME + Timer.ALLOWANCE)
+    min_bound = (STIME - FUDGE)
+    max_bound = (STIME + FUDGE)
     assert (delt[0] > min_bound and delt[0] < max_bound), delt[0]
 
 def test_sleep_independence():

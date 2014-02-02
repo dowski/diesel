@@ -33,7 +33,6 @@ class ExistingSignalHandler(Exception):
 class Timer(object):
     '''A timer is a promise to call some function at a future date.
     '''
-    ALLOWANCE = 0.03 # If we're within 30ms, the timer is due
     def __init__(self, hub, interval, f, *args, **kw):
         self.hub = hub
         self.trigger_time = time() + interval
@@ -60,15 +59,6 @@ class Timer(object):
         self.inq = False
         self.hub = None
         return self.f(*self.args, **self.kw)
-
-    @property
-    def due(self):
-        '''Is it time to run this timer yet?
-
-        The allowance provides some give-and-take so that if a
-        sleep() delay comes back a little early, we still go.
-        '''
-        return (self.trigger_time - time()) < self.ALLOWANCE
 
 class _PipeWrap(object):
     def __init__(self, p):
@@ -233,6 +223,16 @@ class EPollEventHub(AbstractEventHub):
         while self.run_now and self.run:
             self.run_now.popleft()()
 
+        # Run timers first, to try to nail their timings
+        while self.timers and self.timers[-1].trigger_time <= time():
+            t = self.timers.pop()
+            if t.pending:
+                t.callback()
+                while self.run_now and self.run:
+                    self.run_now.popleft()()
+                if not self.run:
+                    return
+
         if self.new_timers:
             for tr in self.new_timers:
                 if tr.pending:
@@ -242,21 +242,15 @@ class EPollEventHub(AbstractEventHub):
             self.new_timers = []
 
         tm = time()
-        timeout = (self.timers[-1].trigger_time - tm) if self.timers else 1e6
+        if self.timers:
+            timeout = self.timers[-1].trigger_time - tm
+            if timeout < 0.001:
+                timeout = 0.001
+        else:
+            timeout = 1e6
         # epoll, etc, limit to 2^^31/1000 or OverflowError
-        timeout = min(timeout, 1e6)
         if timeout < 0 or self.reschedule:
             timeout = 0
-
-        # Run timers first, to try to nail their timings
-        while self.timers and self.timers[-1].due:
-            t = self.timers.pop()
-            if t.pending:
-                t.callback()
-                while self.run_now and self.run:
-                    self.run_now.popleft()()
-                if not self.run:
-                    return
 
         # Handle all socket I/O
         try:
