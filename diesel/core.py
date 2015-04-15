@@ -459,13 +459,14 @@ class Loop(object):
         try:
             conn = self.connection_stack[-1]
         except IndexError:
-            raise RuntimeError("Cannot complete TCP socket operation: no associated connection")
+            raise RuntimeError(
+                    "Cannot complete socket operation: no associated socket")
         conn.check()
         return conn
 
-    def send(self, o, priority=5):
+    def send(self, data, priority=5):
         conn = self.check_connection()
-        conn.queue_outgoing(o, priority)
+        conn.queue_outgoing(data, priority)
         conn.set_writable(True)
 
     def reschedule_with_this_value(self, value):

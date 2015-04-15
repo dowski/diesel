@@ -13,8 +13,7 @@ zctx = zmq.Context.instance()
 
 
 class ZeroMQContext(SocketContext):
-    def __init__(self, zmq_type, zmq_addr):
-        sock = zctx.socket(zmq_type)
+    def __init__(self, sock, zmq_addr):
         fd = IntWrap(sock.getsockopt(zmq.FD))
         super(ZeroMQContext, self).__init__(fd)
         self.incoming = deque([])
@@ -58,19 +57,33 @@ class ZeroMQContext(SocketContext):
     handle_write = handle_events
 
     def _handle_write(self):
-        '''The low-level handler called by the event hub
+        '''The low-level handler called by handle_events
         when the socket is ready for writing.
         '''
         while self.outgoing:
             msg = self.outgoing.popleft()
-            self.zsock.send(msg)
-        self.set_writable(False)
+            try:
+                self.zsock.send(msg, zmq.NOBLOCK)
+            except zmq.ZMQError as e:
+                if e.errno == zmq.EAGAIN:
+                    # re-queue the message for the next time a write is
+                    # scheduled.
+                    self.outgoing.appendleft(msg)
+                    break
+                else:
+                    raise
+        if not self.outgoing:
+            self.set_writable(False)
 
     def _handle_read(self):
-        '''The low-level handler called by the event hub
+        '''The low-level handler called by handle_events
         when the socket is ready for reading.
         '''
-        msg = self.zsock.recv()
+        try:
+            msg = self.zsock.recv(zmq.NOBLOCK)
+        except zmq.ZMQError as e:
+            if e.errno in [zmq.EAGAIN, zmq.EINTR]:
+                return
         if self.waiting_callback:
             self.waiting_callback(msg)
         else:
@@ -98,7 +111,8 @@ class ZeroMQClient(Client):
 
     def _setup_socket(self, ip, timeout, source_ip=None):
         zmq_address = 'tcp://%s:%d' % (ip, self.port)
-        self.socket_context = ZeroMQContext(self.zmq_type, zmq_address)
+        sock = zctx.socket(self.zmq_type)
+        self.socket_context = ZeroMQContext(sock, zmq_address)
         self.socket_context.connect()
         self.ready = True
 
@@ -114,7 +128,8 @@ class ZeroMQService(Service):
         self.dsocket = None
 
     def bind_and_listen(self):
-        self.dsocket = ZeroMQContext(self.zmq_type, self.zmq_address)
+        sock = zctx.socket(self.zmq_type)
+        self.dsocket = ZeroMQContext(sock, self.zmq_address)
         self.dsocket.bind()
         l = Loop(self.connection_handler, self)
         l.connection_stack.append(self.dsocket)
